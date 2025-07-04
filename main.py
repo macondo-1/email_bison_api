@@ -69,7 +69,7 @@ def update_campaign_settings(max_emails_per_day:int, campaign_id:int):
     payload = {
         'max_new_leads_per_day':'{}'.format(max_emails_per_day),
         'max_emails_per_day':'{}'.format(max_emails_per_day),
-        'plain_text':True,
+        'plain_text':False,
         'open_tracking':False
     }
     payload = json.dumps(payload).encode('utf-8')
@@ -383,10 +383,10 @@ def resume_campaign(campaign_id):
     make_api_call(method,api_call,payload)
 
 def create_new_project_in_email_bison():
-    campaign_name = '143386_sedivention_germany_20250703'
-    timezone = 'America/New_York'
-    mail_message_filename = '/Users/albertoruizcajiga/python/sis_international/files/projects/143386_sedivention/' \
-    '143386_sedivention.txt'
+    campaign_name = '144129_dynata_france_20250704'
+    timezone = ''
+    mail_message_filename = '/Users/albertoruizcajiga/python/sis_international/files/projects/144129_dynata_france/' \
+    '144129_dynata_france.txt'
     #list_file_name = 'Cayman_List_1_2_Filtered.csv'
 
     max_emails_per_day = 1000
@@ -426,31 +426,55 @@ def search_leads_ids(filename):
 
     return ids_list
 
+def get_all_blacklisted_emails():
+    method = 'GET'
+    api_call = '/api/blacklisted-emails'
+    payload = ''
+    blacklisted_emails = make_api_call(method,api_call,payload)
+    blacklisted_emails = json.loads(blacklisted_emails)
+    blacklisted_emails = [x['email'] for x in blacklisted_emails['data']]
+
+    return blacklisted_emails
+
 def create_blacklisted_email():
+    blacklisted_emails = get_all_blacklisted_emails()
+    pattern = r'^([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)\.([a-zA-Z]{2,})$'
     filename = const.BLACKLIST_PATH
+
     with open(filename, 'r') as file:
-        contents = file.read()
-        print(contents)
+        contents = file.readlines()
 
-    # payload = "{\"email\": \"john@doe.com\"}"
-
-    # method='POST'
-    # api_call = '/api/blacklisted-emails'
-    # payload=''
-    # make_api_call(method,api_call,payload)
-
-    # result = re.match(r'^([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)\.([a-zA-Z]{2,})$','christine.saenger@web.de')
-
-    # print(result.string)
-
-# TO-DO
-
-# bulk update email signature
-
-# add to block list - email addresses
-# add to block list - domains
+    pending_emails = [x.strip() for x in contents if x.strip() in blacklisted_emails]
+    print(len(pending_emails))
 
 
+    # count = 0
+    # for x in contents:
+    #     x = x.strip()
+    #     result = re.match(pattern,x)
+    #     if result:
+    #         print('correo en loop: ', result.string)
+    #         #if result.string not in blacklisted_emails:
+    #         payload = {'email':result.string}
+    #         payload = json.dumps(payload).encode('utf-8')
+    #         method='POST'
+    #         api_call = '/api/blacklisted-emails'
+    #         count +=1
+    #         make_api_call(method,api_call,payload)
+    #         print(count)
+                
+def bulk_update_email_signatures():
+
+    ids_list = [x for x in range(273)]
+    payload = {
+        'sender_email_ids': ids_list[1:],
+        #"email_signature": "<div style=\"color: #000; direction: ltr; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 14px; font-weight: 400; letter-spacing: 0; line-height: 120%; text-align: left; mso-line-height-alt: 16.8px;\"><p style=\"margin: 0; margin-bottom: 16px;\">Kind regards,<br />{SENDER_FIRST_NAME}</p><div><p><span lang=\"EN-US\">Feel free to visit our website: <a href=\"https://www.sisinternational.com/\" target=\"_blank\" rel=\"noopener\">www.sisinternational.com</a></span></p></div><div><p><span lang=\"EN-US\">We reserve the right to validate all information.</span></p></div><div><p><span lang=\"EN-US\">The incentive processing time is approximately 4 to 6 weeks.</span></p></div><p style=\"margin: 0; margin-bottom: 16px;\">SIS International Research<br />11 E 22nd Street NY, NY 10010<br />(212) 505 6805</p><p style=\"margin: 0; margin-bottom: 16px;\"><span style=\"color: #0b5d95;\"><strong><span style=\"color: #996600;\">New York</span> &#9642; <span style=\"color: #996600;\">London</span> &#9642; <span style=\"color: #996600;\">Los Angeles</span> &#9642; <span style=\"color: #996600;\">Hamburg</span> &#9642; <span style=\"color: #996600;\">Shanghai</span></strong></span></p><p style=\"margin: 0; margin-bottom: 16px;\">Mentioned in <span style=\"color: #0b5d95;\"><strong>Forbes</strong></span>, <span style=\"color: #0b5d95;\"><strong>USA Today</strong></span> &amp; <span style=\"color: #0b5d95;\"><strong>Bloomberg</strong></span></p></div>"
+        'email_signature': '<p><strong>{SENDER_FIRST_NAME}</strong> | Consultant</p>'
+
+    }
+    payload = json.dumps(payload).encode('utf-8')
+    method = 'PATCH'
+    api_call = '/api/sender-emails/signatures/bulk'
+    make_api_call(method, api_call, payload)
 
 add_list_and_start_campaign()
-
