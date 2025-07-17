@@ -4,6 +4,9 @@ import http.client
 import json
 import csv
 import re
+import pandas as pd
+from pathlib import Path
+import datetime
 
 def make_api_call(method, api_call, payload):
     base_link = 'mail.sisconsult.co'
@@ -18,7 +21,7 @@ def make_api_call(method, api_call, payload):
 
     res = conn.getresponse()
     data = res.read()
-    print(data.decode("utf-8"))
+    #print(data.decode("utf-8"))
 
     return data.decode("utf-8")
 
@@ -42,12 +45,36 @@ def list_campaigns():
     api_call = '/api/campaigns'
     method = 'GET'
     records = make_api_call(method, api_call, payload)
-    records = json.loads(records)
+    leads_dict = json.loads(records)
+
+    count = 0
+    while leads_dict['links']['next']:
+        api_call = leads_dict['links']['next'].split('https://mail.sisconsult.co')[1]
+        leads_list = make_api_call(method, api_call, payload)
+        leads_dict_1 = json.loads(leads_list)
+
+        # Correctly merge new data
+        leads_dict['data'].extend(leads_dict_1['data'])
+
+        # Update the 'links' dict so we follow the correct next page
+        leads_dict['links'] = leads_dict_1.get('links', {})
+
+        count += 1
+
+        print(count)
+
     with open('campaigns_info.csv', 'w') as file:
-        fieldnames = records['data'][0].keys()
+        fieldnames = leads_dict['data'][0].keys()
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(records['data'])
+        writer.writerows(leads_dict['data'])
+        
+
+    # with open('campaigns_info.csv', 'w') as file:
+    #     fieldnames = records['data'][0].keys()
+    #     writer = csv.DictWriter(file, fieldnames=fieldnames)
+    #     writer.writeheader()
+    #     writer.writerows(records['data'])
 
 def create_a_campaign(campaign_name:str):
     payload = {
@@ -121,7 +148,7 @@ def create_sequence_steps(campaign_id:int, filename:str):
     make_api_call(method, api_call, payload)
 
 def bulk_create_leads(filename):
-    file_path = '/Users/albertoruizcajiga/Documents/Documents - Alberto’s MacBook Air/final_final/to_process/'
+    file_path = const.TO_PROCESS_PATH
     file_name = file_path + filename
     a = []
     with open(file_name) as file:
@@ -135,9 +162,12 @@ def bulk_create_leads(filename):
     remaining_dict = {}
 
     if len(records_dict['leads']) > 500:
+        print('list is larger than 500 records')
         while len(records_dict['leads']) > 500:
-            records_dict['leads'] = records_dict['leads'][:500]
+            print('uploading the {}th 500 records'.format(count))
+            count += 1
             remaining_dict['leads'] = records_dict['leads'][500:]
+            records_dict['leads'] = records_dict['leads'][:500]
             payload = records_dict
             for x in payload['leads']:
                 x['last_name'] = 'None'
@@ -148,7 +178,7 @@ def bulk_create_leads(filename):
 
             leads_dict = json.loads(data)
 
-            if 'errors' in leads_dict.keys(): #modify: figure out why it fails here?
+            if 'errors' in leads_dict.keys():
                 delete_index = []
                 for x in leads_dict['errors'].keys():
                     delete_index.append(int(x.split('.')[1]))
@@ -175,7 +205,7 @@ def bulk_create_leads(filename):
 
         leads_dict = json.loads(data)
 
-        if 'errors' in leads_dict.keys(): #modify: figure out why it fails here?
+        if 'errors' in leads_dict.keys():
             delete_index = []
             for x in leads_dict['errors'].keys():
                 delete_index.append(int(x.split('.')[1]))
@@ -251,7 +281,6 @@ def append_new_leads():
         payload = ''
         method = 'GET'
         api_call = '/api/leads?page={}'.format(page_number)
-        print(api_call)
         leads_list = make_api_call(method, api_call, payload)
         leads_dict = json.loads(leads_list)
 
@@ -265,7 +294,7 @@ def append_new_leads():
                 records_to_append.append(x)
         count += 1
         page_number += 1
-        print(count)
+
 
     records_to_append.extend(records)
 
@@ -274,66 +303,6 @@ def append_new_leads():
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(records_to_append)
-
-def create_leads_list_from_csv(): # NOT WORKING
-    import requests
-
-    # --- Config ---
-    url = "https://mail.sisconsult.co/api/leads/bulk/csv"
-    token = cred.api_token
-    csv_path = '/Users/albertoruizcajiga/Documents/Documents - Alberto’s MacBook Air/final_final/to_process/3_sartorius_alex_20250624.csv'
-
-    # --- CSV field mapping (from your CSV column headers to expected server fields) ---
-    # This maps your CSV columns to server-side expected fields
-    columns_to_map_indexed = {
-        "columnsToMap[0][first_name]": "first_name",
-        "columnsToMap[0][last_name]": "",
-        "columnsToMap[0][email]": "email",
-        "columnsToMap[0][title]": "",
-        "columnsToMap[0][company]": "",
-        "columnsToMap[0][custom_variable]": ""
-    }
-
-    # Optional default values (if column is missing in CSV)
-    columns_to_map_defaults = {
-        "columnsToMap[first_name]": "et",
-        "columnsToMap[last_name]": "aperiam",
-        "columnsToMap[email]": "halle.west@example.org",
-        "columnsToMap[title]": "qui",
-        "columnsToMap[company]": "ullam"
-    }
-
-    # Name of the contact list
-    form_data = {
-        "name": "3_sartorius_alex_20250624"
-    }
-
-    # Merge all parts of the form data
-    form_data.update(columns_to_map_indexed)
-    form_data.update(columns_to_map_defaults)
-
-    # File upload
-    # files = {
-    #     "csv": (csv_path, open(csv_path, "rb"), "text/csv")
-    # }
-
-    # Headers (Note: requests will set multipart content-type automatically)
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json"
-    }
-
-    # --- Send POST request ---
-    with open(csv_path, "rb") as f:
-        files = {
-            "csv": (csv_path, f, "text/csv")
-        }
-        response = requests.post(url, headers=headers, data=form_data, files=files)
-
-
-    # --- Output ---
-    print("Status:", response.status_code)
-    print(response.text)
 
 def import_leads_list_to_campaign():
 
@@ -364,7 +333,31 @@ def get_list_of_sender_emails():
     method='GET'
     api_call = '/api/sender-emails'
     payload=''
-    make_api_call(method,api_call,payload)
+    leads_list = make_api_call(method,api_call,payload)
+    leads_dict = json.loads(leads_list)
+    count = 0
+    while leads_dict['links']['next']:
+        api_call = leads_dict['links']['next'].split('https://mail.sisconsult.co')[1]
+        leads_list = make_api_call(method, api_call, payload)
+        leads_dict_1 = json.loads(leads_list)
+
+        # Correctly merge new data
+        leads_dict['data'].extend(leads_dict_1['data'])
+
+        # Update the 'links' dict so we follow the correct next page
+        leads_dict['links'] = leads_dict_1.get('links', {})
+
+        count += 1
+
+        print(count)
+
+    with open('sender_emails.csv', 'w') as file:
+        fieldnames = leads_dict['data'][0].keys()
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(leads_dict['data'])
+        
+    return leads_list
 
 def import_sender_emails_by_id(campaign_id:int):
     ids_list = [x for x in range(273)]
@@ -383,22 +376,20 @@ def resume_campaign(campaign_id):
     make_api_call(method,api_call,payload)
 
 def create_new_project_in_email_bison():
-    campaign_name = '144129_dynata_france_20250704'
-    timezone = ''
-    mail_message_filename = '/Users/albertoruizcajiga/python/sis_international/files/projects/144129_dynata_france/' \
-    '144129_dynata_france.txt'
-    #list_file_name = 'Cayman_List_1_2_Filtered.csv'
+    campaign_name = input('Project name: ')
+    date = datetime.datetime.now()
+    date = date.strftime('%Y%m%d')
+    campaign_name = '{0}_{1}'.format(campaign_name, date)
+    timezone = input('time zone: ')
+    mail_message_filename = '{0}/{1}/{1}.txt'.format(const.PROJECTS_DIR, campaign_name)
 
-    max_emails_per_day = 1000
+    max_emails_per_day = 500
     campaign_id = create_a_campaign(campaign_name)
-    list_campaigns() # modify: check if this has worked
+    list_campaigns()
     update_campaign_settings(max_emails_per_day, campaign_id)
     create_campaign_schedule(campaign_id,timezone)
     create_sequence_steps(campaign_id, mail_message_filename)
     import_sender_emails_by_id(campaign_id)
-    # ids_list = bulk_create_leads(list_file_name)
-    # import_leads_by_id_to_campaign(campaign_id, ids_list)
-    # resume_campaign(campaign_id)
 
 def add_list_and_start_campaign():
     campaign_id = int(input('Campaing id: '))
@@ -409,7 +400,7 @@ def add_list_and_start_campaign():
     resume_campaign(campaign_id)
 
 def search_leads_ids(filename):
-    file_path = '/Users/albertoruizcajiga/Documents/Documents - Alberto’s MacBook Air/final_final/to_process/'
+    file_path = const.TO_PROCESS_PATH
     file_name = file_path + filename
     a = []
     with open(file_name, 'r') as file:
@@ -465,16 +456,59 @@ def create_blacklisted_email():
                 
 def bulk_update_email_signatures():
 
-    ids_list = [x for x in range(273)]
+    #ids_list = [x for x in range(273)]
+    ids_list = [270]
     payload = {
         'sender_email_ids': ids_list[1:],
-        #"email_signature": "<div style=\"color: #000; direction: ltr; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 14px; font-weight: 400; letter-spacing: 0; line-height: 120%; text-align: left; mso-line-height-alt: 16.8px;\"><p style=\"margin: 0; margin-bottom: 16px;\">Kind regards,<br />{SENDER_FIRST_NAME}</p><div><p><span lang=\"EN-US\">Feel free to visit our website: <a href=\"https://www.sisinternational.com/\" target=\"_blank\" rel=\"noopener\">www.sisinternational.com</a></span></p></div><div><p><span lang=\"EN-US\">We reserve the right to validate all information.</span></p></div><div><p><span lang=\"EN-US\">The incentive processing time is approximately 4 to 6 weeks.</span></p></div><p style=\"margin: 0; margin-bottom: 16px;\">SIS International Research<br />11 E 22nd Street NY, NY 10010<br />(212) 505 6805</p><p style=\"margin: 0; margin-bottom: 16px;\"><span style=\"color: #0b5d95;\"><strong><span style=\"color: #996600;\">New York</span> &#9642; <span style=\"color: #996600;\">London</span> &#9642; <span style=\"color: #996600;\">Los Angeles</span> &#9642; <span style=\"color: #996600;\">Hamburg</span> &#9642; <span style=\"color: #996600;\">Shanghai</span></strong></span></p><p style=\"margin: 0; margin-bottom: 16px;\">Mentioned in <span style=\"color: #0b5d95;\"><strong>Forbes</strong></span>, <span style=\"color: #0b5d95;\"><strong>USA Today</strong></span> &amp; <span style=\"color: #0b5d95;\"><strong>Bloomberg</strong></span></p></div>"
-        'email_signature': '<p><strong>{SENDER_FIRST_NAME}</strong> | Consultant</p>'
+        #"email_signature": "<div style='font-style: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: 0px; orphans: auto; text-indent: 0px; text-transform: none; white-space: normal; widows: auto; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration: none; box-sizing: border-box; caret-color: rgb(0, 0, 0); color: rgb(0, 0, 0); text-align: left; direction: ltr; font-family: Arial, "Helvetica Neue", Helvetica, sans-serif; font-size: 14px; line-height: 16.799999px;' id="isPasted"><div style='box-sizing: border-box; color: rgb(0, 0, 0); direction: ltr; font-family: Arial, "Helvetica Neue", Helvetica, sans-serif; font-size: 14px; font-weight: 400; letter-spacing: 0px; line-height: 16.799999px; text-align: left;'><p style="box-sizing: border-box; line-height: inherit; margin: 0px 0px 16px;">Kind regards,<br>Senior Project Director<br>Maria Miller</p></div></div><div style='font-style: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: 0px; orphans: auto; text-indent: 0px; text-transform: none; white-space: normal; widows: auto; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration: none; box-sizing: border-box; caret-color: rgb(0, 0, 0); color: rgb(0, 0, 0); text-align: left; direction: ltr; font-family: Arial, "Helvetica Neue", Helvetica, sans-serif; font-size: 14px; line-height: 16.799999px;'><div style="box-sizing: border-box;"><p style="box-sizing: border-box; line-height: inherit;"><span lang="EN-US" style="box-sizing: border-box;">Feel free to visit our website: <a href="https://www.sisinternational.com/" target="_blank" rel="noopener" style="box-sizing: border-box;">www.sisinternational.com</a></span></p></div><div style="box-sizing: border-box;"><p style="box-sizing: border-box; line-height: inherit;"><span lang="EN-US" style="box-sizing: border-box;">We reserve the right to validate all information.&nbsp;</span></p></div><div style="box-sizing: border-box;"><p style="box-sizing: border-box; line-height: inherit;"><span lang="EN-US" style="box-sizing: border-box;">The incentive processing time is approximately 4 to 6 weeks</span></p><p style="box-sizing: border-box; line-height: inherit;"><br></p></div><p style="box-sizing: border-box; line-height: inherit; margin: 0px 0px 16px;">SIS International Research<br style="box-sizing: border-box;">11 E 22nd Street NY, NY 10010<br style="box-sizing: border-box;">(212) 505 6805</p><p style="box-sizing: border-box; line-height: inherit; margin: 0px 0px 16px;"><span style="box-sizing: border-box; color: rgb(11, 93, 149);"><strong style="box-sizing: border-box;"><span style="box-sizing: border-box; color: rgb(153, 102, 0);">New York</span> ‚ñ™ <span style="box-sizing: border-box; color: rgb(153, 102, 0);">London</span> ‚ñ™ <span style="box-sizing: border-box; color: rgb(153, 102, 0);">Los Angeles</span> ‚ñ™ <span style="box-sizing: border-box; color: rgb(153, 102, 0);">Hamburg</span> ‚ñ™ <span style="box-sizing: border-box; color: rgb(153, 102, 0);">Shanghai</span></strong></span></p><p style="box-sizing: border-box; line-height: inherit; margin: 0px 0px 16px;">Mentioned in <span style="box-sizing: border-box; color: rgb(11, 93, 149);"><strong style="box-sizing: border-box;">Forbes</strong></span>, <span style="box-sizing: border-box; color: rgb(11, 93, 149);"><strong style="box-sizing: border-box;">USA Today</strong></span> &amp; <span style="box-sizing: border-box; color: rgb(11, 93, 149);"><strong style="box-sizing: border-box;">Bloomberg</strong></span></p></div>"
+        #'email_signature': '<p><strong>{SENDER_FIRST_NAME}</strong> | Consultant</p>'
+    
 
     }
+    
     payload = json.dumps(payload).encode('utf-8')
+    payload = "{\n  \"sender_email_ids\": [\n    270,\n    2\n  ],\n  \"email_signature\": \"<p><strong>{SENDER_FIRST_NAME}</strong> | Consultant</p>\"\n}"
     method = 'PATCH'
     api_call = '/api/sender-emails/signatures/bulk'
     make_api_call(method, api_call, payload)
+
+def show_sending_schedules():
+    payload = "{\"day\": \"tomorrow\"}"
+    method = 'GET'
+    api_call = '/api/campaigns/sending-schedules'
+    data = make_api_call(method, api_call ,payload)
+
+    data = json.loads(data)
+    with open('campaigns_schedule_tomorrow_2.csv', 'w') as file:
+        fieldnames = data['data'][0].keys()
+        writer = csv.DictWriter(file,fieldnames=fieldnames)
+
+        writer.writeheader()
+        writer.writerows(data['data'])
+
+def get_ids_from_csv():
+    """
+    reads a csv, gets its emails and returns the ids of those already in bison
+    """
+    dir_path = Path(const.TO_PROCESS_PATH)
+    campaign_id = input('campaign id: ')
+    filename = input('file name: ')
+    filename = '{}.csv'.format(filename)
+    filename = dir_path / filename
+    df = pd.read_csv(filename)
+    emails = list(df.email)
+
+    df_bison = pd.read_csv('test.csv', low_memory=False)
+    df_ids = df_bison[df_bison.email.isin(emails)]
+    ids_list = list(df_ids.id)
+
+    import_leads_by_id_to_campaign(campaign_id, ids_list)
+
+def restart_campaigns_schedule():
+    df = pd.read_csv('campaigns_info.csv')
+    ids_list = list(df.id)
+    for id in ids_list:
+        campaign_id = id
+        resume_campaign(campaign_id)
 
 add_list_and_start_campaign()
