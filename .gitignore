@@ -1,3 +1,4 @@
 credentials.py
 .env
 constants.py
+__pycache__/
