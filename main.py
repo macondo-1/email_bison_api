@@ -63,14 +63,14 @@ def list_campaigns():
 
         print(count)
 
-    with open('campaigns_info.csv', 'w') as file:
+    with open(const.CAMPAIGNS_INFO, 'w') as file:
         fieldnames = leads_dict['data'][0].keys()
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(leads_dict['data'])
         
 
-    # with open('campaigns_info.csv', 'w') as file:
+    # with open(const.CAMPAIGNS_INFO, 'w') as file:
     #     fieldnames = records['data'][0].keys()
     #     writer = csv.DictWriter(file, fieldnames=fieldnames)
     #     writer.writeheader()
@@ -362,7 +362,7 @@ def get_list_of_sender_emails():
 
         print(count)
 
-    with open('sender_emails.csv', 'w') as file:
+    with open(const.SENDER_EMAILS, 'w') as file:
         fieldnames = leads_dict['data'][0].keys()
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
@@ -485,13 +485,13 @@ def bulk_update_email_signatures():
     make_api_call(method, api_call, payload)
 
 def show_sending_schedules():
-    payload = "{\"day\": \"tomorrow\"}"
+    payload = "{\"day\": \"today\"}"
     method = 'GET'
     api_call = '/api/campaigns/sending-schedules'
     data = make_api_call(method, api_call ,payload)
 
     data = json.loads(data)
-    with open('campaigns_schedule_tomorrow_2.csv', 'w') as file:
+    with open(const.SCHEDULE_TODAY, 'w') as file:
         fieldnames = data['data'][0].keys()
         writer = csv.DictWriter(file,fieldnames=fieldnames)
 
@@ -517,14 +517,14 @@ def get_ids_from_csv():
     import_leads_by_id_to_campaign(campaign_id, ids_list)
 
 def restart_campaigns_schedule():
-    df = pd.read_csv('campaigns_info.csv')
+    df = pd.read_csv(const.CAMPAIGNS_INFO)
     ids_list = list(df.id)
     for id in ids_list:
         campaign_id = id
         resume_campaign(campaign_id)
 
 def update_all_campaigns_schedules():
-    df = pd.read_csv('campaigns_info.csv')
+    df = pd.read_csv(const.CAMPAIGNS_INFO)
     ids_list = list(df.id)
     for id in ids_list:
         campaign_id = id
