@@ -609,7 +609,7 @@ def change_all_campaign_settings():
         max_emails_per_day = 1000
         update_campaign_settings(max_emails_per_day,campaign_id)
 
-def get_full_normalized_stats_by_date(start_date:str, end_date:str) -> dict:
+def get_full_normalized_stats_by_date(start_date:str, end_date:str, campaign_id:str) -> dict:
     """
     Gets stats for a campaign
     between two given dates
@@ -623,7 +623,7 @@ def get_full_normalized_stats_by_date(start_date:str, end_date:str) -> dict:
     }
     payload = json.dumps(payload).encode('utf-8')
     method = 'GET'
-    api_call = '/api/campaigns/75/line-area-chart-stats'
+    api_call = '/api/campaigns/{}/line-area-chart-stats'.format(campaign_id)
     response = make_api_call(method, api_call, payload)
     response = json.loads(response)
 
@@ -659,5 +659,6 @@ def get_full_normalized_stats_by_date(start_date:str, end_date:str) -> dict:
 
 start_date = '2025-09-01'
 end_date = '2025-09-30'
-response = get_full_normalized_stats_by_date(start_date, end_date)
+campaign_id = '75'
+response = get_full_normalized_stats_by_date(start_date, end_date, campaign_id)
 print(response['data'][2]['label'])
