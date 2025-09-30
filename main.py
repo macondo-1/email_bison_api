@@ -7,6 +7,8 @@ import re
 import pandas as pd
 from pathlib import Path
 import datetime
+import os
+import math
 
 def make_api_call(method, api_call, payload):
     base_link = 'mail.sisconsult.co'
@@ -270,50 +272,104 @@ def get_all_leads():
     return leads_list
   
 def append_new_leads():
-
-    # read existing
-    existing_emails = []
-    records = []
-    with open(const.BISON_EMAILS_PATH, 'r') as file:
-        reader = csv.DictReader(file)
-        for x in reader:
-            # get mails
-            existing_emails.append(x['email'])
-            # get records
-            records.append(x)
-
-    reached_existing_emails = False
-    records_to_append = []
-    count = 0
-    page_number = 1
-    while not reached_existing_emails:
-        # get 15 new records
         
-        payload = ''
-        method = 'GET'
-        api_call = '/api/leads?page={}'.format(page_number)
-        leads_list = make_api_call(method, api_call, payload)
-        leads_dict = json.loads(leads_list)
+    try:
+        # read existing
+        existing_emails = []
+        records = []
+        with open(const.BISON_EMAILS_PATH, 'r') as file:
+            reader = csv.DictReader(file)
+            for x in reader:
+                # get mails
+                existing_emails.append(x['email'])
+                # get records
+                records.append(x)
 
-        # records in mails?
-        
-        for x in leads_dict['data']:
-            if x['email'] in existing_emails: #this wont work
-                reached_existing_emails = True
-            else:
-                # add to records
-                records_to_append.append(x)
-        count += 1
-        page_number += 1
+        downloaded_emails_count = len(existing_emails)
+        print('existing emails:', downloaded_emails_count)
+
+        first_api_page = math.floor(downloaded_emails_count/15) - 1
+        first_api_page = 31839 # Need to update manually each time I resume the program
+
+        reached_existing_emails = False
+        records_to_append = []
+        count = 0
+        page_number = first_api_page
+        remaining_records_to_download = 1
+        while not reached_existing_emails or remaining_records_to_download>0:
+            # get 15 new records
+            
+            payload = ''
+            method = 'GET'
+            api_call = '/api/leads?page={}'.format(page_number)
+            leads_list = make_api_call(method, api_call, payload)
+            leads_dict = json.loads(leads_list)
+            total_records_in_bison = int(leads_dict['meta']['total'])
+
+            # records in mails?
+            
+
+            for x in leads_dict['data']:
+                if x['email'] in existing_emails: #this wont work
+                    reached_existing_emails = True
+                else:
+                    # add to records
+                    records_to_append.append(x)
+            
+            
+
+            new_records_count = len(records_to_append)
+
+            if new_records_count<=0:
+                print('no emails added in this cycle')
+            print('cycle:', count)
+            count += 1
+            print('page_number:', page_number)
+            page_number += 1
+
+            downloaded_emails_count += 15
+            message = 'downloaded: {0} out of {1} records'.format(downloaded_emails_count, total_records_in_bison)
+            print(message) 
+
+            remaining_records_to_download = int(total_records_in_bison) - int(downloaded_emails_count)
+            pending_api_calls = remaining_records_to_download/15
+            message_2 = '{} pending api calls'.format(pending_api_calls)
+            print(message_2)
+
+            message_3 = '{} remaining_records_to_download\n'.format(remaining_records_to_download)
+            print(message_3)
+            remaining_records_to_download
 
 
-    records_to_append.extend(records)
+        records_to_append.extend(records)
 
-    with open(const.BISON_EMAILS_PATH, 'w') as file:
-        fieldnames = records_to_append[0].keys()
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(records_to_append)
+        with open(const.BISON_EMAILS_PATH, 'w') as file:
+            fieldnames = records_to_append[0].keys()
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(records_to_append)
+
+    except Exception as error:
+        print(error)
+        records_to_append.extend(records)
+        print('new records:',len(records_to_append))
+        with open(const.BISON_EMAILS_PATH, 'w') as file:
+            fieldnames = records_to_append[0].keys()
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(records_to_append)
+        print('new records saved')
+
+    except KeyboardInterrupt:
+        print('saving new records')
+        records_to_append.extend(records)
+        print('new records:',len(records_to_append))
+        with open(const.BISON_EMAILS_PATH, 'w') as file:
+            fieldnames = records_to_append[0].keys()
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(records_to_append)
+        print('new records saved')
 
 def import_leads_list_to_campaign():
 
@@ -485,7 +541,7 @@ def bulk_update_email_signatures():
     make_api_call(method, api_call, payload)
 
 def show_sending_schedules():
-    payload = "{\"day\": \"today\"}"
+    payload = "{\"day\": \"day_after_tomorrow\"}"
     method = 'GET'
     api_call = '/api/campaigns/sending-schedules'
     data = make_api_call(method, api_call ,payload)
@@ -520,8 +576,10 @@ def restart_campaigns_schedule():
     df = pd.read_csv(const.CAMPAIGNS_INFO)
     ids_list = list(df.id)
     for id in ids_list:
+        print('id:', id)
         campaign_id = id
         resume_campaign(campaign_id)
+        print('')
 
 def update_all_campaigns_schedules():
     df = pd.read_csv(const.CAMPAIGNS_INFO)
@@ -543,17 +601,61 @@ def update_all_campaigns_schedules():
         del schedule['status']
         update_campaign_schedule(campaign_id, schedule)
 
-#list_campaigns()
-#add_list_and_start_campaign()
+def change_all_campaign_settings():
+    df = pd.read_csv(const.CAMPAIGNS_INFO)
+    ids_list = list(df.id)
+    for id in ids_list:
+        campaign_id = id
+        max_emails_per_day = 1000
+        update_campaign_settings(max_emails_per_day,campaign_id)
 
-restart_campaigns_schedule()
+def get_full_normalized_stats_by_date():
+    """
+    Gets stats for a campaign
+    between two given dates
+    returns a dictionary
+    """
+    start_date = '2025-09-01'
+    end_date = '2025-09-30'
+    payload = {
+        'start_date':'{}'.format(start_date),
+        'end_date':'{}'.format(end_date)
+    }
+    payload = json.dumps(payload).encode('utf-8')
+    method = 'GET'
+    api_call = '/api/campaigns/75/line-area-chart-stats'
+    response = make_api_call(method, api_call, payload)
+    response = json.loads(response)
+
+    return response
+
+    # for x in response['data']:
+    #     if x['label'] == 'Sent':
+    #         for y in x['dates']:
+    #             print(y[0])
+    #             print(y[1])
 
 
 
-# GET IDS FROM LIST AND ADD TO CAMPAIGN
-# df = pd.read_csv('/Users/albertoruizcajiga/Documents/Documents - Alberto’s MacBook Air/final_final/to_process/1241151_sartorius_apollo_20250717.csv')
-# df_bison = pd.read_csv(const.BISON_EMAILS_PATH)
+# tests
 
-# ids_list = list(df_bison[df_bison['email'].isin(df.email)]['id'])
-# campaign_id = input('campaign id: ')
-# import_leads_by_id_to_campaign(campaign_id, ids_list) 146824
+# payload = ''
+# page_number = 2
+# method = 'GET'
+# api_call = '/api/leads?page={}'.format(page_number)
+# leads_list = make_api_call(method, api_call, payload)
+# leads_dict = json.loads(leads_list)
+# # new_emails = [x['email'].lower().strip() for x in leads_dict['data']]
+
+
+# # df = pd.read_csv('files/bison_emails.csv',low_memory=False)
+# # emails = list(df['email'])
+
+# # print(new_emails)
+
+# os.system('clear')
+# print(leads_dict.keys())
+# print(leads_dict['meta']['total'])
+
+# response = get_full_normalized_stats_by_date()
+# print(response)
