@@ -609,14 +609,14 @@ def change_all_campaign_settings():
         max_emails_per_day = 1000
         update_campaign_settings(max_emails_per_day,campaign_id)
 
-def get_full_normalized_stats_by_date():
+def get_full_normalized_stats_by_date(start_date:str, end_date:str) -> dict:
     """
     Gets stats for a campaign
     between two given dates
+    dates format 'YYYY-MM-DD'
     returns a dictionary
     """
-    start_date = '2025-09-01'
-    end_date = '2025-09-30'
+
     payload = {
         'start_date':'{}'.format(start_date),
         'end_date':'{}'.format(end_date)
@@ -657,5 +657,7 @@ def get_full_normalized_stats_by_date():
 # print(leads_dict.keys())
 # print(leads_dict['meta']['total'])
 
-# response = get_full_normalized_stats_by_date()
-# print(response)
+start_date = '2025-09-01'
+end_date = '2025-09-30'
+response = get_full_normalized_stats_by_date(start_date, end_date)
+print(response['data'][2]['label'])
