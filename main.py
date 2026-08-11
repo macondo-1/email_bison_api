@@ -1,5 +1,5 @@
-import credentials as cred
-import constants as const
+import modules.email_bison_api.credentials as cred
+import modules.email_bison_api.constants as const
 import http.client
 import json
 import csv
@@ -160,6 +160,7 @@ def create_sequence_steps(campaign_id:int, filename:str):
     make_api_call(method, api_call, payload)
 
 def bulk_create_leads(filename):
+    print('bulk_create_leads started')
     file_name = const.TO_PROCESS_PATH.joinpath(filename)
     a = []
     with open(file_name) as file:
@@ -206,6 +207,7 @@ def bulk_create_leads(filename):
             records_dict['leads'] = remaining_dict['leads']
 
     else:
+        print('uploading records')
         payload = records_dict
         for x in payload['leads']:
             x['last_name'] = 'None'
@@ -231,9 +233,8 @@ def bulk_create_leads(filename):
 
         append_new_leads()
 
-    # out of loop
     ids_list = search_leads_ids(filename)
-
+    print('bulk_create_leads finished')
     return ids_list
         
 def get_all_leads():
@@ -331,7 +332,9 @@ def import_leads_by_id_to_campaign(campaign_id, ids_list):
     payload = json.dumps(payload).encode('utf-8')
     method = 'POST'
     api_call = '/api/campaigns/{}/leads/attach-leads'.format(campaign_id)
-    make_api_call(method, api_call, payload)
+    print(api_call)
+    response = make_api_call(method, api_call, payload)
+    print(response.text)
 
 def view_available_timezones():
 
@@ -404,6 +407,21 @@ def create_new_project_in_email_bison():
     create_sequence_steps(campaign_id, mail_message_filename)
     import_sender_emails_by_id(campaign_id)
 
+def create_new_project_in_email_bison_concurrency(campaign_name, timezone):
+    date = datetime.datetime.now()
+    date = date.strftime('%Y%m%d')
+    campaign_name_for_bison = '{0}_{1}'.format(campaign_name, date)
+    # mail_message_filename = '{0}/{1}/{1}.txt'.format(const.PROJECTS_DIR, campaign_name)
+    filename = '{}.txt'.format(campaign_name)
+    mail_message_filename = const.PROJECTS_DIR.joinpath(campaign_name, filename)
+    max_emails_per_day = 500
+    campaign_id = create_a_campaign(campaign_name_for_bison)
+    #list_campaigns()
+    update_campaign_settings(max_emails_per_day, campaign_id)
+    create_campaign_schedule(campaign_id,timezone)
+    create_sequence_steps(campaign_id, mail_message_filename)
+    import_sender_emails_by_id(campaign_id)
+
 def add_list_and_start_campaign():
     campaign_id = int(input('Campaing id: '))
     list_file_name = input('List name: ')
@@ -411,6 +429,15 @@ def add_list_and_start_campaign():
     ids_list = bulk_create_leads(list_file_name)
     import_leads_by_id_to_campaign(campaign_id, ids_list)
     resume_campaign(campaign_id)
+
+def add_list_and_start_campaign_concurrency(campaign_id, list_file_name):
+    print('starting process')
+    ids_list = bulk_create_leads(list_file_name)
+    print('step 1: leads uploaded...')
+    import_leads_by_id_to_campaign(campaign_id, ids_list)
+    print('step 2: leads assigned to campaign...')
+    resume_campaign(campaign_id)
+    print('step 3: resumed campaign with new leads')
 
 def search_leads_ids(filename):
     file_name = const.TO_PROCESS_PATH.joinpath(filename)
@@ -517,6 +544,7 @@ def get_ids_from_csv():
     import_leads_by_id_to_campaign(campaign_id, ids_list)
 
 def restart_campaigns_schedule():
+    list_campaigns()
     df = pd.read_csv(const.CAMPAIGNS_INFO)
     ids_list = list(df.id)
     for id in ids_list:
@@ -543,17 +571,25 @@ def update_all_campaigns_schedules():
         del schedule['status']
         update_campaign_schedule(campaign_id, schedule)
 
-#list_campaigns()
-#add_list_and_start_campaign()
+def get_full_normalized_stats_by_date(start_date:str, end_date:str, campaign_id:str) -> dict:
+    """
+    Gets stats for a campaign
+    between two given dates
+    dates format 'YYYY-MM-DD'
+    returns a dictionary
+    """
 
-restart_campaigns_schedule()
+    payload = {
+        'start_date':'{}'.format(start_date),
+        'end_date':'{}'.format(end_date)
+    }
+    payload = json.dumps(payload).encode('utf-8')
+    method = 'GET'
+    api_call = '/api/campaigns/{}/line-area-chart-stats'.format(campaign_id)
+    response = make_api_call(method, api_call, payload)
+    response = json.loads(response)
 
+    return response
 
-
-# GET IDS FROM LIST AND ADD TO CAMPAIGN
-# df = pd.read_csv('/Users/albertoruizcajiga/Documents/Documents - Alberto’s MacBook Air/final_final/to_process/1241151_sartorius_apollo_20250717.csv')
-# df_bison = pd.read_csv(const.BISON_EMAILS_PATH)
-
-# ids_list = list(df_bison[df_bison['email'].isin(df.email)]['id'])
-# campaign_id = input('campaign id: ')
-# import_leads_by_id_to_campaign(campaign_id, ids_list) 146824
+if __name__ == '__main__':
+    pass

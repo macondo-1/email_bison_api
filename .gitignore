@@ -3,3 +3,4 @@ credentials.py
 constants.py
 __pycache__/
 files
+.DS_Store
